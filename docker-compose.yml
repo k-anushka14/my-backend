@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Redis service for caching
+  redis:
+    image: redis:7-alpine
+    container_name: fake-news-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Fake News Detection Backend
+  backend:
+    build: .
+    container_name: fake-news-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - API_KEY=${API_KEY:-default_api_key}
+      - CHROME_EXTENSION_ID=${CHROME_EXTENSION_ID:-default_extension_id}
+      - GOOGLE_FACT_CHECK_API_KEY=${GOOGLE_FACT_CHECK_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./models:/app/models  # Optional: persist downloaded models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  redis_data:
+    driver: local
